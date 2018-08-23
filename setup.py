@@ -6,20 +6,15 @@ def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
 setup(
-    name="prometheus_openstack_exporter",
+    name="prometheus_swift_exporter",
     version="0.0.4",
     author="Jacek Nykis",
-    description="Exposes high level OpenStack metrics to Prometheus.",
+    description="Exposes high level OpenStack Swift metrics to Prometheus.",
     license="GPLv3",
-    keywords=["prometheus", "openstack", "exporter"],
-    url="https://github.com/CanonicalLtd/prometheus-openstack-exporter",
-    scripts=["prometheus-openstack-exporter"],
-    install_requires=["prometheus_client",
-                      "python-keystoneclient<=3.10.0",
-                      "python-novaclient==6.0.0",
-                      "python-neutronclient<=6.1.0",
-                      "python-cinderclient",
-                      "netaddr"],
+    keywords=["prometheus", "openstack", "swift", "exporter"],
+    url="https://github.com/ilanddev/prometheus-swift-exporter",
+    scripts=["prometheus-swift-exporter"],
+    install_requires=["prometheus_client"],
     long_description=read('README.md'),
     classifiers=[
         "Development Status :: 4 - Beta",
