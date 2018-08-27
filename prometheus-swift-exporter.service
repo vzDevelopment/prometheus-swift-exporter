@@ -1,0 +1,12 @@
+[Unit]
+Description=prometheus-swift-exporter
+After=network.target
+
+[Service]
+EnvironmentFile=/etc/default/prometheus-swift-exporter
+ExecStart=/opt/prometheus-swift-exporter/prometheus-swift-exporter /etc/prometheus/prometheus-swift-exporter.yaml
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target
+

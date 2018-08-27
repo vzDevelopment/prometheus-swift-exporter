@@ -1,0 +1,11 @@
+# Example configuration file for prometheus-swift-exporter
+# Copyright (C) 2016 Canonical, Ltd.
+#
+
+listen_port: 9183
+
+# There is no way to retrieve them using OpenStack APIs
+# For clouds deployed without swift, remove this part
+swift_hosts:
+    - host1.example.com
+    - host2.example.com

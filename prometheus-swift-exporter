@@ -1,0 +1,187 @@
+#!/usr/bin/env python
+"""
+OpenStack Swift exporter for the prometheus monitoring system
+
+Copyright (C) 2016 Canonical, Ltd.
+Authors:
+  Jacek Nykis <jacek.nykis@canonical.com>
+  Laurent Sesques <laurent.sesques@canonical.com>
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License version 3,
+as published by the Free Software Foundation.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranties of
+MERCHANTABILITY, SATISFACTORY QUALITY, or FITNESS FOR A PARTICULAR PURPOSE.
+See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+"""
+
+import argparse
+import yaml
+from os import path
+import traceback
+import urlparse
+import requests
+from BaseHTTPServer import BaseHTTPRequestHandler
+from BaseHTTPServer import HTTPServer
+from SocketServer import ForkingMixIn
+from prometheus_client import CollectorRegistry, generate_latest, Gauge, CONTENT_TYPE_LATEST
+
+import logging
+import logging.handlers
+
+log = logging.getLogger('poe-logger')
+
+
+class Swift():
+    def __init__(self):
+        self.registry = CollectorRegistry()
+        self.baseurl = 'http://{}:6000/recon/{}'
+        self.swift_hosts = config.get('swift_hosts', [])
+
+    def gen_up_stats(self):
+        labels = ['cloud', 'hostname']
+        swift_up = Gauge('swift_host_up', 'Swift host reachability',
+                         labels, registry=self.registry)
+        for h in self.swift_hosts:
+            try:
+                requests.get(self.baseurl.format(h, 'diskusage'))
+                swift_up.labels(config['cloud'], h).set(1)
+            except requests.exceptions.RequestException:
+                swift_up.labels(config['cloud'], h).set(0)
+
+    def gen_disk_usage_stats(self):
+        labels = ['cloud', 'hostname', 'device', 'type']
+        swift_disk = Gauge('swift_disk_usage_bytes', 'Swift disk usage in bytes',
+                           labels, registry=self.registry)
+        for h in self.swift_hosts:
+            try:
+                r = requests.get(self.baseurl.format(h, 'diskusage'))
+            except requests.exceptions.RequestException:
+                continue
+            for disk in r.json():
+                if not all([disk.get(i, False) for i in ['size', 'used', 'device']]):
+                    continue
+                swift_disk.labels(config['cloud'], h, disk['device'], 'size').set(int(disk['size']))
+                swift_disk.labels(config['cloud'], h, disk['device'], 'used').set(int(disk['used']))
+
+    def gen_quarantine_stats(self):
+        labels = ['cloud', 'hostname', 'ring']
+        swift_quarantine = Gauge('swift_quarantined_objects', 'Number of quarantined objects',
+                                 labels, registry=self.registry)
+        for h in self.swift_hosts:
+            try:
+                r = requests.get(self.baseurl.format(h, 'quarantined'))
+            except requests.exceptions.RequestException:
+                continue
+            for ring in ['accounts', 'objects', 'containers']:
+                swift_quarantine.labels(config['cloud'], h, ring).set(r.json().get(ring))
+
+    def gen_replication_stats(self):
+        labels = ['cloud', 'hostname', 'ring', 'type']
+        swift_repl = Gauge('swift_replication_stats', 'Swift replication stats', labels, registry=self.registry)
+        labels = ['cloud', 'hostname', 'ring']
+        swift_repl_duration = Gauge('swift_replication_duration_seconds', 'Swift replication duration in seconds',
+                                    labels, registry=self.registry)
+        for h in self.swift_hosts:
+            metrics = ['attempted', 'diff', 'diff_capped', 'empty',
+                       'failure', 'hashmatch', 'no_change', 'remote_merge',
+                       'remove', 'rsync', 'success', 'ts_repl']
+            # Object replication is special
+            try:
+                r = requests.get(self.baseurl.format(h, 'replication/object'))
+            except requests.exceptions.RequestException:
+                continue
+            try:
+                swift_repl_duration.labels(config['cloud'], h, 'object').set(r.json()['object_replication_time'])
+            except TypeError:
+                print(traceback.format_exc())
+
+            for ring in ['account', 'container']:
+                try:
+                    r = requests.get(self.baseurl.format(h, 'replication/' + ring))
+                except requests.exceptions.RequestException:
+                    continue
+                try:
+                    swift_repl_duration.labels(config['cloud'], h, ring).set(r.json()['replication_time'])
+                except TypeError:
+                    print(traceback.format_exc())
+
+                for metric in metrics:
+                    try:
+                        swift_repl.labels(config['cloud'], h, ring, metric).set(r.json()['replication_stats'][metric])
+                    except TypeError:
+                        print(traceback.format_exc())
+
+    def get_stats(self):
+        self.gen_up_stats()
+        self.gen_disk_usage_stats()
+        self.gen_quarantine_stats()
+        self.gen_replication_stats()
+        return generate_latest(self.registry)
+
+
+class ForkingHTTPServer(ForkingMixIn, HTTPServer):
+    pass
+
+
+class OpenstackSwiftExporterHandler(BaseHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        BaseHTTPRequestHandler.__init__(self, *args, **kwargs)
+
+    def do_GET(self):
+        url = urlparse.urlparse(self.path)
+        if url.path == '/metrics':
+            try:
+                swift = Swift()
+                log.debug("Collecting stats..")
+                output = swift.get_stats()
+                self.send_response(200)
+                self.send_header('Content-Type', CONTENT_TYPE_LATEST)
+                self.end_headers()
+                self.wfile.write(output)
+            except:
+                self.send_response(500)
+                self.end_headers()
+                self.wfile.write(traceback.format_exc())
+        elif url.path == '/':
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write("""<html>
+            <head><title>OpenStack Swift Exporter</title></head>
+            <body>
+            <h1>OpenStack Swift Exporter</h1>
+            <p>Visit <code>/metrics</code> to use.</p>
+            </body>
+            </html>""")
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+
+def handler(*args, **kwargs):
+    OpenstackSwiftExporterHandler(*args, **kwargs)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(usage=__doc__,
+                                     description='Prometheus OpenStack Swift exporter',
+                                     formatter_class=argparse.RawTextHelpFormatter)
+    parser.add_argument('config_file', nargs='?',
+                        help='Configuration file path',
+                        default='/etc/prometheus/prometheus-swift-exporter.yaml',
+                        type=argparse.FileType('r'))
+    args = parser.parse_args()
+    log.setLevel(logging.DEBUG)
+    for logsock in ('/dev/log', '/var/run/syslog'):
+        if path.exists(logsock):
+            log.addHandler(logging.handlers.SysLogHandler(address=logsock))
+    else:
+        log.addHandler(logging.StreamHandler())
+    config = yaml.safe_load(args.config_file.read())
+    server = ForkingHTTPServer(('', config.get('listen_port')), handler)
+    server.serve_forever()
