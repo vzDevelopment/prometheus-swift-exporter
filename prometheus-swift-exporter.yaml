@@ -3,6 +3,10 @@
 #
 
 listen_port: 9183
+cloud: mycloud
+
+# Port for swift recon urls
+swift_port: 6000
 
 # There is no way to retrieve them using OpenStack APIs
 # For clouds deployed without swift, remove this part
