@@ -40,7 +40,7 @@ log = logging.getLogger('poe-logger')
 class Swift():
     def __init__(self):
         self.registry = CollectorRegistry()
-        self.baseurl = 'http://{}:6000/recon/{}'
+        self.baseurl = 'http://{{}}:{}/recon/{{}}'.format(config.get('swift_port','6000'))
         self.swift_hosts = config.get('swift_hosts', [])
 
     def gen_up_stats(self):
