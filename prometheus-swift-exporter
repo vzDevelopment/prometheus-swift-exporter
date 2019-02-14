@@ -114,10 +114,9 @@ class Swift():
             except requests.exceptions.RequestException:
                 continue
             for disk in r.json():
-                if not all([disk.get(i, False) for i in ['device']]):
-                    continue
-                swift_unmounted.labels(
-                    config['cloud'], h, disk['device']).set(1)
+                if disk.get('mounted', True) is False:
+                    swift_unmounted.labels(config['cloud'],
+                                           h, disk['device']).set(1)
 
     def gen_replication_stats(self):
         labels = ['cloud', 'hostname', 'ring', 'type']
