@@ -12,10 +12,11 @@ setup(
     description="Exposes high level OpenStack Swift metrics to Prometheus.",
     license="GPLv3",
     keywords=["prometheus", "openstack", "swift", "exporter"],
-    url="https://github.com/ilanddev/prometheus-swift-exporter",
+    url="https://github.com/vorsprung/prometheus-swift-exporter",
     scripts=["prometheus-swift-exporter"],
+    data_files=[("/etc/systemd/system",["prometheus-swift-exporter.service"])],
     install_requires=["prometheus_client"],
-    long_description=read('README.md'),
+    long_description="Exposes high level OpenStack Swift metrics to Prometheus.",
     classifiers=[
         "Development Status :: 4 - Beta",
         "Topic :: System :: Networking :: Monitoring",

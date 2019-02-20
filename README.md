@@ -12,7 +12,7 @@ Install prometheus_client:
 pip install prometheus_client
 ```
 
-## Installation
+## Manual Installation
 
 ```
 # Copy example config in place, edit to your needs
@@ -42,6 +42,13 @@ Or to run interactively:
 
 Configuration options are documented in prometheus-swift-exporter.yaml shipped with this project
 
+# To build rpm
+
+```
+python setup.py  bdist_rpm --post-install post.sh
+```
+
+This installs the systemd service file but not the prometheus-swift-exporter.yaml
 # FAQ
 
 ## Why hardcode swift host list?
