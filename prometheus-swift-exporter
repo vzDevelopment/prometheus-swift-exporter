@@ -24,12 +24,20 @@ import argparse
 import yaml
 from os import path
 import traceback
-import urlparse
+try:
+    from urllib.parse import urlparse
+except ImportError:
+     from urlparse import urlparse
 import requests
 import json as simplejson
-from BaseHTTPServer import BaseHTTPRequestHandler
-from BaseHTTPServer import HTTPServer
-from SocketServer import ForkingMixIn
+try:
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+except ImportError:
+    from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
+try:
+    from socketserver import ForkingMixIn
+except ImportError:
+    from SocketServer import ForkingMixIn
 from prometheus_client import CollectorRegistry, generate_latest, \
                               Gauge, CONTENT_TYPE_LATEST
 
@@ -37,7 +45,7 @@ import logging
 import logging.handlers
 
 log = logging.getLogger('poe-logger')
-
+config = None
 
 class Swift():
     def __init__(self):
