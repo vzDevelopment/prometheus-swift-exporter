@@ -59,7 +59,7 @@ class Swift():
                          labels, registry=self.registry)
         for h in self.swift_hosts:
             try:
-                r = self.gen_get(h, 'diskusage')
+                r = self.gen_get(h, 'version')
                 swift_up.labels(config['cloud'], h).set(1)
             except requests.exceptions.RequestException:
                 swift_up.labels(config['cloud'], h).set(0)
