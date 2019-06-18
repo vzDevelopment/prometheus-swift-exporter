@@ -47,7 +47,7 @@ class Swift():
         self.swift_hosts = config.get('swift_hosts', [])
 
     def gen_get(self, h, p):
-        r = requests.get(self.baseurl.format(h, 'diskusage'))
+        r = requests.get(self.baseurl.format(h, p))
         if r.status_code != 200:
             raise requests.exceptions.RequestException
         return r
