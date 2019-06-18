@@ -5,6 +5,10 @@
 listen_port: 9183
 cloud: mycloud
 
+# Number of seconds to wait before timing out when calling
+# the Swift recon API
+api_timeout: 10
+
 # Port for swift recon urls
 swift_port: 6000
 

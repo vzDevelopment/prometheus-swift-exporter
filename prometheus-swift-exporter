@@ -45,9 +45,10 @@ class Swift():
         self.baseurl = 'http://{{}}:{}/recon/{{}}'.format(
             config.get('swift_port', '9002'))
         self.swift_hosts = config.get('swift_hosts', [])
+        self.api_timeout = config.get('api_timeout', 10)
 
     def gen_get(self, h, p):
-        r = requests.get(self.baseurl.format(h, p))
+        r = requests.get(self.baseurl.format(h, p), timeout=self.api_timeout)
         if r.status_code != 200:
             raise requests.exceptions.RequestException
         return r
