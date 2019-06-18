@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 EnvironmentFile=/etc/default/prometheus-swift-exporter
-ExecStart=/usr/bin/prometheus-swift-exporter
+ExecStart=/usr/bin/prometheus-swift-exporter ${CONFIG_FILE}
 KillMode=process
 
 [Install]
