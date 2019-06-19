@@ -107,7 +107,7 @@ class Swift():
 
     def gen_unmounted_stats(self):
         labels = ['cloud', 'hostname', 'device']
-        swift_unmounted = Gauge('swift_umounted_disks', 'Disk is unmounted',
+        swift_unmounted = Gauge('swift_unmounted_disks', 'Disk is unmounted',
                                 labels, registry=self.registry)
         for h in self.swift_hosts:
             try:
