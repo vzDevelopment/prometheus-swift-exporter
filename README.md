@@ -7,9 +7,10 @@ Exposes high level [OpenStack](http://www.openstack.org/) metrics to [Prometheus
 
 ## Requirements
 
-Install prometheus_client:
+Install prometheus_client and requests-futures:
 ```
 pip install prometheus_client
+pip install requests-futures
 ```
 
 ## Manual Installation

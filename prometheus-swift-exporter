@@ -26,6 +26,7 @@ from os import path
 import traceback
 import urlparse
 import requests
+from requests_futures.sessions import FuturesSession
 import json as simplejson
 from BaseHTTPServer import BaseHTTPRequestHandler
 from BaseHTTPServer import HTTPServer
@@ -47,22 +48,31 @@ class Swift():
         self.swift_hosts = config.get('swift_hosts', [])
         self.api_timeout = config.get('api_timeout', 10)
 
-    def gen_get(self, h, p):
-        r = requests.get(self.baseurl.format(h, p), timeout=self.api_timeout)
-        if r.status_code != 200:
-            raise requests.exceptions.RequestException
-        return r
+        self.session = FuturesSession(
+            max_workers=config.get('api_threads', 10))
+        self.session.hooks['response'] = check_status
+
+    def gen_get(self, endpoint):
+        future_requests = {}
+        for host in self.swift_hosts:
+            future_requests[host] = self.session.get(
+                self.baseurl.format(host, endpoint),
+                timeout=self.api_timeout
+            )
+
+        return future_requests
 
     def gen_up_stats(self):
         labels = ['cloud', 'hostname']
         swift_up = Gauge('swift_host_up', 'Swift host reachability',
                          labels, registry=self.registry)
-        for h in self.swift_hosts:
+
+        for host, request in self.gen_get('version').items():
             try:
-                r = self.gen_get(h, 'version')
-                swift_up.labels(config['cloud'], h).set(1)
+                r = request.result()
+                swift_up.labels(config['cloud'], host).set(1)
             except requests.exceptions.RequestException:
-                swift_up.labels(config['cloud'], h).set(0)
+                swift_up.labels(config['cloud'], host).set(0)
 
     def gen_disk_usage_stats(self):
         labels = ['cloud', 'hostname', 'device', 'type']
@@ -71,9 +81,9 @@ class Swift():
             'Swift disk usage in bytes',
             labels,
             registry=self.registry)
-        for h in self.swift_hosts:
+        for host, request in self.gen_get('diskusage').items():
             try:
-                r = self.gen_get(h, 'diskusage')
+                r = request.result()
             except requests.exceptions.RequestException as ValueError:
                 continue
             for disk in r.json():
@@ -81,10 +91,10 @@ class Swift():
                             for i in ['size', 'used', 'device']]):
                     continue
                 swift_disk.labels(config['cloud'],
-                                  h, disk['device'],
+                                  host, disk['device'],
                                   'size').set(int(disk['size']))
                 swift_disk.labels(config['cloud'],
-                                  h, disk['device'],
+                                  host, disk['device'],
                                   'used').set(int(disk['used']))
 
     def gen_quarantine_stats(self):
@@ -94,30 +104,30 @@ class Swift():
             'Number of quarantined objects',
             labels,
             registry=self.registry)
-        for h in self.swift_hosts:
+        for host, request in self.gen_get('quarantined').items():
             try:
-                r = self.gen_get(h, 'quarantined')
+                r = request.result()
             except requests.exceptions.RequestException:
                 continue
             for ring in ['accounts', 'objects', 'containers']:
                 if (isinstance(r.json(), dict)):
                     swift_quarantine.labels(
-                        config['cloud'], h, ring).set(
+                        config['cloud'], host, ring).set(
                         r.json().get(ring))
 
     def gen_unmounted_stats(self):
         labels = ['cloud', 'hostname', 'device']
         swift_unmounted = Gauge('swift_unmounted_disks', 'Disk is unmounted',
                                 labels, registry=self.registry)
-        for h in self.swift_hosts:
+        for host, request in self.gen_get('unmounted').items():
             try:
-                r = self.gen_get(h, 'unmounted')
+                r = request.result()
             except requests.exceptions.RequestException:
                 continue
             for disk in r.json():
                 if disk.get('mounted', True) is False:
                     swift_unmounted.labels(config['cloud'],
-                                           h, disk['device']).set(1)
+                                           host, disk['device']).set(1)
 
     def gen_replication_stats(self):
         labels = ['cloud', 'hostname', 'ring', 'type']
@@ -132,31 +142,40 @@ class Swift():
             'Swift replication duration in seconds',
             labels,
             registry=self.registry)
-        for h in self.swift_hosts:
-            metrics = ['attempted', 'diff', 'diff_capped', 'empty',
-                       'failure', 'hashmatch', 'no_change', 'remote_merge',
-                       'remove', 'rsync', 'success', 'ts_repl']
+
+        metrics = ['attempted', 'diff', 'diff_capped', 'empty',
+                   'failure', 'hashmatch', 'no_change', 'remote_merge',
+                   'remove', 'rsync', 'success', 'ts_repl']
+
+        object_requests = self.gen_get('replication/object')
+
+        rings = ['account', 'container']
+        ring_requests = {}
+        for ring in ['account', 'container']:
+            ring_requests[ring] = self.gen_get('replication/' + ring)
+
+        for host, request in object_requests.items():
             # Object replication is special
             try:
-                r = self.gen_get(h, 'replication/object')
+                r = request.result()
             except requests.exceptions.RequestException:
                 continue
             try:
                 swift_repl_duration.labels(
-                    config['cloud'], h, 'object').set(
+                    config['cloud'], host, 'object').set(
                     r.json()['object_replication_time'])
             except TypeError:
                 continue
 
-            for ring in ['account', 'container']:
+            for ring in ring_requests.keys():
                 try:
-                    r = self.gen_get(h, 'replication/' + ring)
+                    r = ring_requests.get(ring).get(host).result()
                 except requests.exceptions.RequestException:
                     continue
                 try:
                     if (r.json()['replication_time']):
                         swift_repl_duration.labels(
-                            config['cloud'], h, ring).set(
+                            config['cloud'], host, ring).set(
                             r.json()['replication_time'])
                 except TypeError:
                     print(traceback.format_exc())
@@ -165,11 +184,11 @@ class Swift():
                     for metric in metrics:
                         try:
                             swift_repl.labels(
-                                config['cloud'], h, ring, metric).set(
+                                config['cloud'], host, ring, metric).set(
                                 r.json()['replication_stats'][metric])
                         except TypeError:
                             print("M", metric)
-                            print("C", config['cloud'], h, ring, metric)
+                            print("C", config['cloud'], host, ring, metric)
                             print("R", r.json()['replication_stats'])
                             print(traceback.format_exc())
 
@@ -222,6 +241,11 @@ class OpenstackSwiftExporterHandler(BaseHTTPRequestHandler):
 
 def handler(*args, **kwargs):
     OpenstackSwiftExporterHandler(*args, **kwargs)
+
+
+def check_status(resp, *args, **kwargs):
+    if resp.status_code != 200:
+        raise requests.exceptions.RequestException
 
 
 if __name__ == '__main__':
