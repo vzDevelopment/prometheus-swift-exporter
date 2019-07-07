@@ -45,9 +45,10 @@ class Swift():
         self.baseurl = 'http://{{}}:{}/recon/{{}}'.format(
             config.get('swift_port', '9002'))
         self.swift_hosts = config.get('swift_hosts', [])
+        self.api_timeout = config.get('api_timeout', 10)
 
     def gen_get(self, h, p):
-        r = requests.get(self.baseurl.format(h, 'diskusage'))
+        r = requests.get(self.baseurl.format(h, p), timeout=self.api_timeout)
         if r.status_code != 200:
             raise requests.exceptions.RequestException
         return r
@@ -58,7 +59,7 @@ class Swift():
                          labels, registry=self.registry)
         for h in self.swift_hosts:
             try:
-                r = self.gen_get(h, 'diskusage')
+                r = self.gen_get(h, 'version')
                 swift_up.labels(config['cloud'], h).set(1)
             except requests.exceptions.RequestException:
                 swift_up.labels(config['cloud'], h).set(0)
@@ -106,7 +107,7 @@ class Swift():
 
     def gen_unmounted_stats(self):
         labels = ['cloud', 'hostname', 'device']
-        swift_unmounted = Gauge('swift_umounted_disks', 'Disk is unmounted',
+        swift_unmounted = Gauge('swift_unmounted_disks', 'Disk is unmounted',
                                 labels, registry=self.registry)
         for h in self.swift_hosts:
             try:
