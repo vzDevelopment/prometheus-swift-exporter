@@ -9,6 +9,10 @@ cloud: mycloud
 # the Swift recon API
 api_timeout: 10
 
+# The number of asynchronous workers to use when connecting to
+# the Swift recon API
+api_threads: 10
+
 # Port for swift recon urls
 swift_port: 6000
 

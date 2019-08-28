@@ -15,7 +15,7 @@ setup(
     url="https://github.com/vorsprung/prometheus-swift-exporter",
     scripts=["prometheus-swift-exporter"],
     data_files=[("/etc/systemd/system",["prometheus-swift-exporter.service"])],
-    install_requires=["prometheus_client"],
+    install_requires=["prometheus_client", "requests_futures"],
     long_description="Exposes high level OpenStack Swift metrics to Prometheus.",
     classifiers=[
         "Development Status :: 4 - Beta",
